@@ -1,0 +1,947 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#1f2329" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Site View" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <title>ParkPlanner — Site View</title>
+    <style>
+      :root { --bg:#10141a; --panel:rgba(20,26,34,.92); --border:#39424f; --text:#eef2f7; --accent:#3b82f6; --hazard:#ef4444; }
+      * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+      html,body { margin:0; height:100%; background:var(--bg); color:var(--text); font-family:system-ui,sans-serif; overflow:hidden; }
+      #c { position:fixed; inset:0; touch-action:none; display:block; z-index:1; }
+      .ar-trim { position:fixed; bottom:64px; left:8px; right:8px; z-index:6; display:flex; gap:12px; background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:8px 12px; }
+      .ar-trim label { flex:1; font-size:12px; display:flex; flex-direction:column; gap:2px; color:#cfd6df; }
+      .ar-trim input { width:100%; }
+      .tab.on { color:var(--accent); }
+      #stick { position:fixed; left:16px; bottom:118px; width:108px; height:108px; border-radius:50%; background:rgba(20,26,34,.4); border:1px solid var(--border); z-index:6; display:none; touch-action:none; }
+      #stick.show { display:block; }
+      #knob { position:absolute; left:34px; top:34px; width:40px; height:40px; border-radius:50%; background:rgba(59,130,246,.9); border:2px solid #fff; box-shadow:0 2px 6px rgba(0,0,0,.4); }
+      .bar { position:fixed; left:0; right:0; display:flex; gap:8px; padding:8px; z-index:5; }
+      button { background:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:13px; padding:12px 14px; font-size:15px; font-weight:600; box-shadow:0 2px 8px rgba(0,0,0,.35); transition:background .12s ease, transform .05s ease; }
+      button:active { background:#2b3340; transform:translateY(1px); }
+      button.primary { background:var(--accent); border-color:var(--accent); box-shadow:0 3px 12px rgba(59,130,246,.45); }
+      button.hazard { background:var(--hazard); border-color:var(--hazard); box-shadow:0 3px 12px rgba(239,68,68,.4); }
+
+      /* professional header bar */
+      .topbar { position:fixed; left:0; right:0; top:0; z-index:6; display:flex; align-items:center; gap:10px;
+        padding:calc(8px + env(safe-area-inset-top)) 12px 10px; background:linear-gradient(to bottom, rgba(14,18,24,.96), rgba(14,18,24,.72)); border-bottom:1px solid var(--border); box-shadow:0 4px 18px rgba(0,0,0,.4); }
+      .topbar .hdr { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
+      .topbar .title { font-size:16px; font-weight:700; letter-spacing:.2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .topbar .gps { display:flex; align-items:center; gap:6px; font-size:12px; color:#9aa5b1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .gdot { width:8px; height:8px; border-radius:50%; background:#9aa5b1; flex:none; box-shadow:0 0 0 3px rgba(154,165,177,.18); }
+      .gdot.ok { background:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,.2); }
+      .gdot.wait { background:#f59e0b; box-shadow:0 0 0 3px rgba(245,158,11,.2); }
+      .iconbtn { width:44px; height:44px; padding:0; font-size:20px; border-radius:14px; flex:none; }
+
+      /* professional bottom tab bar (icon over label) */
+      .bottom { position:fixed; left:0; right:0; bottom:0; z-index:6; display:flex; justify-content:space-around; align-items:stretch;
+        padding:8px 6px calc(6px + env(safe-area-inset-bottom)); background:linear-gradient(to top, rgba(14,18,24,.98), rgba(14,18,24,.8)); border-top:1px solid var(--border); box-shadow:0 -6px 22px rgba(0,0,0,.5); }
+      .tab { flex:1; max-width:96px; display:flex; flex-direction:column; align-items:center; gap:3px; background:none; border:none; box-shadow:none; padding:6px 4px; color:#aab3bf; font-weight:600; }
+      .tab .ic { font-size:21px; line-height:1; }
+      .tab .lb { font-size:10.5px; letter-spacing:.2px; }
+      .tab:active { transform:none; background:rgba(255,255,255,.06); border-radius:12px; }
+      .tab.on { color:var(--accent); }
+      .tab.hazard { color:#f08a8a; }
+      .grow { flex:1; }
+      .pill { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:8px 12px; font-size:13px; line-height:1.35; }
+      #status { white-space:pre-line; }
+      .sheet { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:flex-end; z-index:20; }
+      .sheet.show { display:flex; }
+      .sheet .inner { width:100%; background:var(--panel); border-top:1px solid var(--border); border-radius:16px 16px 0 0; padding:16px; max-height:80%; overflow:auto; }
+      .sheet h2 { margin:0 0 10px; font-size:17px; }
+      .row { display:flex; gap:8px; align-items:center; margin:6px 0; }
+      textarea, input[type=text] { width:100%; background:#0c1117; color:var(--text); border:1px solid var(--border); border-radius:8px; padding:9px; font-size:14px; }
+      .haz-item { display:flex; justify-content:space-between; gap:8px; padding:7px 0; border-bottom:1px solid var(--border); }
+      .muted { color:#9aa5b1; font-size:12px; }
+      .banner { position:fixed; top:60px; left:8px; right:8px; z-index:6; }
+    </style>
+  </head>
+  <body>
+    <canvas id="c"></canvas>
+
+    <div class="topbar">
+      <div class="hdr">
+        <div class="title" id="status">Loading…</div>
+        <div class="gps"><span class="gdot" id="gpsDot"></span><span id="gpsText">…</span></div>
+      </div>
+      <button id="btnCompass" class="iconbtn" title="Enable compass">🧭</button>
+    </div>
+
+    <div class="ar-trim" id="arTrim" style="display:none">
+      <label>Horizon<input id="trimPitch" type="range" min="-40" max="40" value="0" /></label>
+      <label>Aim<input id="trimHead" type="range" min="-30" max="30" value="0" /></label>
+    </div>
+
+    <div class="banner pill" id="calBanner" style="display:none">
+      <b>Calibrate:</b> tap the point on the plan where you're standing (a known corner, post, manhole…), then tap <b>Set</b>.
+      <div class="row">
+        <button id="calSet" class="primary grow">Set my position here</button>
+        <button id="calCancel">Cancel</button>
+      </div>
+    </div>
+
+    <div id="stick" aria-label="Move"><div id="knob"></div></div>
+
+    <nav class="bottom">
+      <button id="btnAR" class="tab"><span class="ic">🧊</span><span class="lb">3D</span></button>
+      <button id="btnRecenter" class="tab"><span class="ic">◎</span><span class="lb">Locate</span></button>
+      <button id="btnLayers" class="tab"><span class="ic">▤</span><span class="lb">Layers</span></button>
+      <button id="btnCalibrate" class="tab"><span class="ic">⌖</span><span class="lb">Calibrate</span></button>
+      <button id="btnHazard" class="tab hazard"><span class="ic">⚠</span><span class="lb">Hazard</span></button>
+      <button id="btnList" class="tab"><span class="ic">☰</span><span class="lb">Hazards</span></button>
+    </nav>
+
+    <div class="sheet" id="sheet">
+      <div class="inner">
+        <h2>Hazards & export</h2>
+        <div id="hazList"></div>
+        <div class="row"><button id="hazExport" class="primary grow">Copy hazards code (paste into ParkPlanner)</button></div>
+        <p class="muted">In ParkPlanner desktop: <b>Send to phone → Import hazards</b>, then paste this code. Hazards import as markers you can route roads around.</p>
+        <div class="row"><button id="sheetClose" class="grow">Close</button></div>
+      </div>
+    </div>
+
+    <div class="sheet" id="layerSheet">
+      <div class="inner">
+        <h2>Layers</h2>
+        <div id="layerList"></div>
+        <div class="row"><button id="layerClose" class="grow">Close</button></div>
+      </div>
+    </div>
+
+    <script type="module">
+      // ---- local frame (must match the desktop app) ----
+      const M_PER_DEG_LAT = 110540;
+      const mPerDegLng = (lat) => M_PER_DEG_LAT * Math.cos((lat * Math.PI) / 180);
+
+      function b64urlDecode(s) {
+        s = s.replace(/-/g, '+').replace(/_/g, '/');
+        while (s.length % 4) s += '=';
+        return decodeURIComponent(escape(atob(s)));
+      }
+      function b64urlEncode(str) {
+        return btoa(unescape(encodeURIComponent(str))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      }
+      function bytesFromB64url(s) {
+        s = s.replace(/-/g, '+').replace(/_/g, '/');
+        while (s.length % 4) s += '=';
+        const bin = atob(s);
+        const out = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+        return out;
+      }
+
+      const flatToPts = (a) => {
+        const o = [];
+        for (let i = 0; i < a.length; i += 2) o.push({ x: a[i], y: a[i + 1] });
+        return o;
+      };
+
+      // ---- binary codec (port of payload.ts decodeBinary) ----
+      const MARKER_CODES = ['fire-point','water','electric','gas','reception','toilet-block','parking','bin-store','street-light','recreation-area','hazard','tree','supply-point','fountain','bin','car','parking-bay','waterfall','gate','automated-gate'];
+      const KIND_CODES = ['recreation','parking','bin','bed','water'];
+      // Underground services (append-only, mirrors payload.ts)
+      const SERVICE_CODES = ['foul','surface','water','electric','gas','telecoms'];
+      const ASSET_KIND_CODES = ['tank','manhole','pump','kiosk'];
+      const SERVICE_COL = { foul:'#7a4b2b', surface:'#13b6a6', water:'#2563eb', electric:'#ef4444', gas:'#f59e0b', telecoms:'#a855f7' };
+      const serviceKey = (s) => 'svc' + (s ? s[0].toUpperCase() + s.slice(1) : 'Foul');
+      const hexA = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`; };
+      async function gunzip(bytes) {
+        const s = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+        return new Uint8Array(await new Response(s).arrayBuffer());
+      }
+      function decodeBinary(bytes) {
+        let pos = 0;
+        const u8 = () => bytes[pos++];
+        const vint = () => { let shift = 1, result = 0, b; do { b = bytes[pos++]; result += (b & 127) * shift; shift *= 128; } while (b & 128); return result; };
+        const unzz = () => { const z = vint(); return z % 2 === 1 ? -(z + 1) / 2 : z / 2; };
+        const f64 = () => { const dv = new DataView(new ArrayBuffer(8)); for (let i = 0; i < 8; i++) dv.setUint8(i, bytes[pos++]); return dv.getFloat64(0, true); };
+        const str = () => { const len = bytes[pos++]; const s = new TextDecoder().decode(bytes.subarray(pos, pos + len)); pos += len; return s; };
+        const poly = () => { const n = vint(); const out = []; let px = 0, py = 0; for (let i = 0; i < n; i++) { px += unzz(); py += unzz(); out.push({ x: px / 10, y: py / 10 }); } return out; };
+        u8(); // version
+        const anchor = [f64(), f64()];
+        const name = str();
+        const polygons = [], polylines = [], points = [];
+        const uc = vint();
+        for (let i = 0; i < uc; i++) {
+          const cx = unzz() / 10, cy = unzz() / 10, L = vint() / 10, W = vint() / 10, rot = vint();
+          const rr = (rot * Math.PI) / 180, cs = Math.cos(rr), sn = Math.sin(rr), hl = L / 2, hw = W / 2;
+          const pts = [[-hl,-hw],[hl,-hw],[hl,hw],[-hl,hw]].map(([dx, dy]) => ({ x: cx + dx * cs - dy * sn, y: cy + dx * sn + dy * cs }));
+          polygons.push({ pts, kind: 'unit' });
+        }
+        const rc = vint(); for (let i = 0; i < rc; i++) { const w = vint() / 10; polylines.push({ pts: poly(), w, kind: 'road' }); }
+        const fc = vint(); for (let i = 0; i < fc; i++) { const w = vint() / 10; polylines.push({ pts: poly(), w, kind: 'footpath' }); }
+        const gc = vint(); for (let i = 0; i < gc; i++) { const k = KIND_CODES[u8()] || 'recreation'; polygons.push({ pts: poly(), kind: k }); }
+        const boundary = u8() ? poly() : null;
+        const mc = vint();
+        for (let i = 0; i < mc; i++) { const t = MARKER_CODES[u8()] || 'hazard'; const x = unzz() / 10, y = unzz() / 10, r = vint() / 10, label = str(); points.push({ p: { x, y }, kind: t, r, label }); }
+        // v4+: driveways then fences (tolerant of older links that lack them)
+        if (pos < bytes.length) { const dc = vint(); for (let i = 0; i < dc; i++) { const w = vint() / 10; polylines.push({ pts: poly(), w, kind: 'driveway' }); } }
+        if (pos < bytes.length) { const fnc = vint(); for (let i = 0; i < fnc; i++) polylines.push({ pts: poly(), w: 0, kind: 'fence' }); }
+        // v5+: service runs then utility assets (tolerant of older links)
+        if (pos < bytes.length) { const sc = vint(); for (let i = 0; i < sc; i++) { const s = SERVICE_CODES[u8()] || 'foul'; polylines.push({ pts: poly(), w: 0, kind: 'service', service: s }); } }
+        if (pos < bytes.length) { const ac = vint(); for (let i = 0; i < ac; i++) {
+          const k = ASSET_KIND_CODES[u8()] || 'tank', s = SERVICE_CODES[u8()] || 'foul';
+          const cx = unzz() / 10, cy = unzz() / 10, L = vint() / 10, W = vint() / 10, rot = vint();
+          const rr = (rot * Math.PI) / 180, cs = Math.cos(rr), sn = Math.sin(rr), hl = L / 2, hw = W / 2;
+          const pts = [[-hl,-hw],[hl,-hw],[hl,hw],[-hl,hw]].map(([dx, dy]) => ({ x: cx + dx * cs - dy * sn, y: cy + dx * sn + dy * cs }));
+          polygons.push({ pts, kind: 'asset', service: s, assetKind: k });
+        } }
+        return { name, anchor, boundary, polygons, polylines, points };
+      }
+
+      // Normalise a payload (compact v2 or older) into the render structure.
+      function normalize(raw) {
+        if (!raw) return null;
+        if (raw.v === 2) {
+          const polygons = [];
+          for (const u of raw.u || []) {
+            const [cx, cy, L, W, rot] = u;
+            const rr = (rot * Math.PI) / 180, cs = Math.cos(rr), sn = Math.sin(rr), hl = L / 2, hw = W / 2;
+            const pts = [[-hl, -hw], [hl, -hw], [hl, hw], [-hl, hw]].map(([dx, dy]) => ({ x: cx + dx * cs - dy * sn, y: cy + dx * sn + dy * cs }));
+            polygons.push({ pts, kind: 'unit' });
+          }
+          for (const gg of raw.g || []) polygons.push({ pts: flatToPts(gg.p), kind: gg.k });
+          const polylines = (raw.r || []).map((x) => ({ pts: flatToPts(x.p), w: x.w, kind: 'road' }))
+            .concat((raw.f || []).map((x) => ({ pts: flatToPts(x.p), w: x.w, kind: 'footpath' })));
+          const points = (raw.m || []).map((mk) => ({ p: { x: mk[1], y: mk[2] }, kind: mk[0], r: mk[3] || 0, label: mk[4] || '' }));
+          return { name: raw.name, anchor: raw.anchor, boundary: raw.b ? flatToPts(raw.b) : null, polygons, polylines, points };
+        }
+        return raw; // already a render structure (legacy v1 / stored)
+      }
+
+      // Returns a render structure for any supported link format.
+      async function decodeFragment(raw) {
+        const tag = raw[0];
+        if (tag === 'b' || tag === 'B') {
+          let bytes = bytesFromB64url(raw.slice(1));
+          if (tag === 'b') bytes = await gunzip(bytes);
+          return decodeBinary(bytes);
+        }
+        try {
+          if (tag === 'z' || tag === 'j') {
+            const bytes = bytesFromB64url(raw.slice(1));
+            if (tag === 'z' && typeof DecompressionStream !== 'undefined') {
+              const s = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+              return normalize(JSON.parse(await new Response(s).text()));
+            }
+            return normalize(JSON.parse(new TextDecoder().decode(bytes)));
+          }
+        } catch (e) { /* fall through to legacy */ }
+        return normalize(JSON.parse(b64urlDecode(raw))); // legacy: plain base64 JSON
+      }
+
+      let oldShortLink = false;
+      async function loadPlan() {
+        // 1) full plan embedded in the link (#d=...)
+        const m = location.hash.match(/[#&]d=([^&]+)/);
+        if (m) {
+          try {
+            const norm = await decodeFragment(m[1]);
+            localStorage.setItem('pp_lastplan', JSON.stringify(norm));
+            return norm;
+          } catch (e) { console.error('decode failed', e); }
+        }
+        // 2) old short link (#k=key): the plan store it pointed at has been
+        //    retired, so the plan must come in the link itself now.
+        if (/[#&]k=/.test(location.hash)) oldShortLink = true;
+        // 3) offline fallback: last cached plan
+        const s = localStorage.getItem('pp_lastplan');
+        if (s) { try { return JSON.parse(s); } catch (e) { /* ignore */ } }
+        return null;
+      }
+
+      let plan = await loadPlan();
+
+      // offline support: cache the app shell so it opens with no signal on site
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js').catch(() => {});
+      }
+
+      const canvas = document.getElementById('c');
+      const ctx = canvas.getContext('2d');
+      const statusEl = document.getElementById('status');
+      let DPR = Math.min(2, window.devicePixelRatio || 1);
+      function resize() {
+        DPR = Math.min(2, window.devicePixelRatio || 1);
+        canvas.width = innerWidth * DPR; canvas.height = innerHeight * DPR;
+        canvas.style.width = innerWidth + 'px'; canvas.style.height = innerHeight + 'px';
+        draw();
+      }
+      addEventListener('resize', resize);
+
+      function toLocal(lng, lat) {
+        const [lng0, lat0] = plan.anchor;
+        return { x: (lng - lng0) * mPerDegLng(lat0), y: (lat - lat0) * M_PER_DEG_LAT };
+      }
+
+      // ---- view ----
+      const view = { cx: 0, cy: 0, ppm: 4 }; // centre (local m) + px per metre
+      function L2S(p) {
+        return { x: innerWidth / 2 + (p.x - view.cx) * view.ppm, y: innerHeight / 2 - (p.y - view.cy) * view.ppm };
+      }
+      function S2L(sx, sy) {
+        return { x: view.cx + (sx - innerWidth / 2) / view.ppm, y: view.cy - (sy - innerHeight / 2) / view.ppm };
+      }
+      // Centre + zoom the view to show the whole plan (the default "map" view).
+      function fitToPlan() {
+        if (!plan) return;
+        let mnx = Infinity, mny = Infinity, mxx = -Infinity, mxy = -Infinity;
+        const add = (p) => { if (p.x < mnx) mnx = p.x; if (p.x > mxx) mxx = p.x; if (p.y < mny) mny = p.y; if (p.y > mxy) mxy = p.y; };
+        (plan.boundary || []).forEach(add);
+        for (const g of plan.polygons || []) g.pts.forEach(add);
+        for (const l of plan.polylines || []) l.pts.forEach(add);
+        for (const q of plan.points || []) add(q.p);
+        if (mnx === Infinity) return;
+        view.cx = (mnx + mxx) / 2; view.cy = (mny + mxy) / 2;
+        const w = Math.max(10, mxx - mnx), h = Math.max(10, mxy - mny);
+        view.ppm = Math.max(0.5, Math.min(40, Math.min(innerWidth / (w * 1.2), innerHeight / (h * 1.2))));
+      }
+
+      // ---- state ----
+      let me = null;        // corrected local position {x,y}
+      let rawMe = null;     // uncorrected
+      let acc = null;       // accuracy m
+      let heading = null;   // degrees from north
+      let offset = { x: 0, y: 0 };
+      const recent = [];    // recent raw fixes for averaging
+      let hazards = [];
+      let calMode = false;
+      let calRef = null;    // tapped plan point during calibration
+      let followMe = false; // default: fixed map view; ◎ Me re-locks onto GPS
+      // 3D view trims
+      let trimPitch = 0;    // deg, manual horizon nudge
+      let trimHead = 0;     // deg, manual aim nudge
+      const EYE_H = 1.6;    // eye height (m)
+      const VFOV = 58 * Math.PI / 180; // assumed vertical field of view
+
+      const hkey = 'pp_haz_' + (plan && plan.name ? plan.name : 'site');
+      try { hazards = JSON.parse(localStorage.getItem(hkey) || '[]'); } catch (e) { hazards = []; }
+      try { offset = JSON.parse(localStorage.getItem(hkey + '_off') || '{"x":0,"y":0}'); } catch (e) {}
+      const saveHaz = () => localStorage.setItem(hkey, JSON.stringify(hazards));
+      const saveOff = () => localStorage.setItem(hkey + '_off', JSON.stringify(offset));
+
+      // ---- layer visibility (choosable on the phone, persisted per plan) ----
+      const lkey = 'pp_layers_' + (plan && plan.name ? plan.name : 'site');
+      let visible = {};
+      try { visible = JSON.parse(localStorage.getItem(lkey) || '{}'); } catch (e) { visible = {}; }
+      const saveVis = () => localStorage.setItem(lkey, JSON.stringify(visible));
+      const isOn = (key) => visible[key] !== false; // default on
+      // Map a decoded feature to its layer key.
+      function polyKeyG(g) {
+        return g.kind === 'unit' ? 'units' : g.kind === 'parking' ? 'parking' : g.kind === 'bin' ? 'binStores'
+          : g.kind === 'bed' ? 'flowerBeds' : g.kind === 'water' ? 'water' : g.kind === 'asset' ? serviceKey(g.service)
+          : g.kind === 'recreation' ? 'recreation' : 'recreation';
+      }
+      function polyKeyL(l) {
+        return l.kind === 'road' ? 'roads' : l.kind === 'footpath' ? 'footpaths' : l.kind === 'driveway' ? 'driveways'
+          : l.kind === 'fence' ? 'fences' : l.kind === 'service' ? serviceKey(l.service) : 'roads';
+      }
+      const showG = (g) => isOn(polyKeyG(g));
+      const showL = (l) => isOn(polyKeyL(l));
+
+      // ---- drawing ----
+      function poly(pts, close) {
+        if (!pts.length) return;
+        ctx.beginPath();
+        pts.forEach((p, i) => { const s = L2S(p); i ? ctx.lineTo(s.x, s.y) : ctx.moveTo(s.x, s.y); });
+        if (close) ctx.closePath();
+      }
+      function draw() {
+        if (mode3d) { draw3D(); return; }
+        ctx.save();
+        // ABSOLUTE transform (not scale()) so it never compounds with the
+        // transform left by the 3D renderer — otherwise the GPS dot & co. would
+        // double in size after exiting 3D.
+        ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+        ctx.clearRect(0, 0, innerWidth, innerHeight);
+        ctx.fillStyle = '#1c2a1c'; ctx.fillRect(0, 0, innerWidth, innerHeight);
+        if (!plan) { ctx.restore(); return; }
+
+        // polygons
+        for (const g of plan.polygons) {
+          if (!showG(g)) continue;
+          poly(g.pts, true);
+          ctx.fillStyle = g.kind === 'unit' ? 'rgba(219,228,238,.85)'
+            : g.kind === 'deck' ? 'rgba(176,122,69,.8)'
+            : g.kind === 'parking' ? 'rgba(100,116,139,.6)'
+            : g.kind === 'bed' ? 'rgba(120,160,70,.6)'
+            : g.kind === 'bin' ? 'rgba(146,64,14,.6)'
+            : g.kind === 'water' ? 'rgba(37,99,235,.55)'
+            : g.kind === 'asset' ? hexA(SERVICE_COL[g.service] || '#888', .5)
+            : 'rgba(80,160,90,.45)';
+          ctx.fill();
+          ctx.lineWidth = 1;
+          ctx.strokeStyle = g.kind === 'asset' ? (SERVICE_COL[g.service] || '#555') : 'rgba(0,0,0,.4)';
+          ctx.stroke();
+        }
+        // polylines (roads / footpaths / driveways) with real width; fences thin;
+        // underground services as dashed coloured lines
+        for (const l of plan.polylines) {
+          if (!showL(l)) continue;
+          poly(l.pts, false);
+          ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+          if (l.kind === 'service') {
+            ctx.lineWidth = 3; ctx.strokeStyle = SERVICE_COL[l.service] || '#888';
+            ctx.setLineDash([7, 5]); ctx.stroke(); ctx.setLineDash([]);
+            continue;
+          }
+          ctx.lineWidth = l.kind === 'fence' ? 2 : Math.max(2, l.w * view.ppm);
+          ctx.strokeStyle = l.kind === 'road' ? '#6b7280'
+            : l.kind === 'driveway' ? '#c7b794'
+            : l.kind === 'fence' ? '#5a5048'
+            : '#cbd5e1';
+          ctx.stroke();
+        }
+        // boundary
+        if (plan.boundary && isOn('boundary')) {
+          poly(plan.boundary, true);
+          ctx.lineWidth = 2; ctx.strokeStyle = '#3b82f6'; ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([]);
+        }
+        // markers — simple colour-coded dots, no labels (matches the desktop colours)
+        const MK_COL = {
+          'street-light': '#facc15', 'supply-point': '#b45309', electric: '#dc2626',
+          'fire-point': '#dc2626', gas: '#facc15', water: '#2563eb', tree: '#2f7d32',
+          fountain: '#0891b2',
+        };
+        // dot size scales with the map (≈0.5 m) so it shrinks when you zoom out,
+        // with caps so it stays visible but never unit-sized.
+        const dotR = Math.max(1.5, Math.min(5, 0.5 * view.ppm));
+        for (const pt of (isOn('markers') ? plan.points : [])) {
+          const s = L2S(pt.p);
+          if (pt.kind === 'tree' && pt.r) {
+            ctx.fillStyle = 'rgba(63,154,58,.28)'; ctx.beginPath(); ctx.arc(s.x, s.y, pt.r * view.ppm, 0, 7); ctx.fill();
+            ctx.strokeStyle = '#2f7d32'; ctx.lineWidth = 1; ctx.stroke();
+          }
+          ctx.fillStyle = MK_COL[pt.kind] || '#0ea5e9';
+          ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.arc(s.x, s.y, dotR, 0, 7); ctx.fill(); ctx.stroke();
+        }
+        // hazards — red triangle, scales with the map too
+        const hzR = Math.max(3, Math.min(8, 0.9 * view.ppm));
+        for (const h of hazards) {
+          const s = L2S(h);
+          ctx.fillStyle = '#ef4444';
+          ctx.beginPath(); ctx.moveTo(s.x, s.y - hzR); ctx.lineTo(s.x + hzR * 0.85, s.y + hzR * 0.75); ctx.lineTo(s.x - hzR * 0.85, s.y + hzR * 0.75); ctx.closePath(); ctx.fill();
+          ctx.strokeStyle = 'rgba(0,0,0,.4)'; ctx.lineWidth = 1; ctx.stroke();
+        }
+        // calibration reference
+        if (calRef) {
+          const s = L2S(calRef);
+          ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(s.x, s.y, 12, 0, 7); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(s.x - 16, s.y); ctx.lineTo(s.x + 16, s.y); ctx.moveTo(s.x, s.y - 16); ctx.lineTo(s.x, s.y + 16); ctx.stroke();
+        }
+        // me
+        if (me) {
+          const s = L2S(me);
+          if (acc) { ctx.fillStyle = 'rgba(59,130,246,.15)'; ctx.beginPath(); ctx.arc(s.x, s.y, acc * view.ppm, 0, 7); ctx.fill(); }
+          if (heading != null) {
+            ctx.save(); ctx.translate(s.x, s.y); ctx.rotate((heading * Math.PI) / 180);
+            ctx.fillStyle = '#3b82f6'; ctx.beginPath(); ctx.moveTo(0, -16); ctx.lineTo(9, 8); ctx.lineTo(0, 3); ctx.lineTo(-9, 8); ctx.closePath(); ctx.fill();
+            ctx.restore();
+          }
+          ctx.fillStyle = '#3b82f6'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(s.x, s.y, 7, 0, 7); ctx.fill(); ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      // ---- 3D walkthrough (no camera) ----------------------------------------
+      // Render the plan in first-person from the user's GPS position, looking
+      // wherever the phone points (compass + tilt), so you can see how the
+      // finished site would look around you. Drag to look around manually.
+      let mode3d = false, raf3d = 0, manualLook = null;
+      // Free-explore: roam the model with the on-screen stick when you're not on
+      // site (or want to wander off your GPS position). freePos is the camera's
+      // ground position while exploring; moveVec is the current stick direction.
+      let explore = false, freePos = null, moveVec = { x: 0, y: 0 };
+      const UNIT_H = 3.0;   // assumed lodge / static height (m)
+      const NEARZ = 0.4;    // near clip plane (m)
+      const WALK_SPD = 9;   // explore movement speed (m/s)
+
+      // A pleasant opening viewpoint when there's no GPS: stand south of the site.
+      function startViewpoint() {
+        const b = planBBox();
+        return { x: b.cx, y: b.mny - Math.max(20, b.h * 0.7) };
+      }
+      function camGround() {
+        if (freePos) return freePos;
+        if (me) return { x: me.x, y: me.y };
+        return startViewpoint();
+      }
+      // Advance the explore camera each frame based on the stick + facing.
+      function stepMove(dt) {
+        if (!explore || !freePos || (!moveVec.x && !moveVec.y)) return;
+        const h = ((manualLook ? manualLook.yaw : (heading != null ? heading : 0)) + trimHead) * Math.PI / 180;
+        const sh = Math.sin(h), ch = Math.cos(h);
+        const fwd = moveVec.y * WALK_SPD * dt, str = moveVec.x * WALK_SPD * dt;
+        freePos.x += fwd * sh + str * ch;
+        freePos.y += fwd * ch - str * sh;
+      }
+
+      function planBBox() {
+        let mnx = Infinity, mny = Infinity, mxx = -Infinity, mxy = -Infinity;
+        const add = (p) => { if (p.x < mnx) mnx = p.x; if (p.x > mxx) mxx = p.x; if (p.y < mny) mny = p.y; if (p.y > mxy) mxy = p.y; };
+        (plan.boundary || []).forEach(add);
+        for (const g of plan.polygons || []) g.pts.forEach(add);
+        for (const l of plan.polylines || []) l.pts.forEach(add);
+        for (const q of plan.points || []) add(q.p);
+        if (mnx === Infinity) { mnx = mny = -10; mxx = mxy = 10; }
+        return { mnx, mny, mxx, mxy, cx: (mnx + mxx) / 2, cy: (mny + mxy) / 2, w: mxx - mnx, h: mxy - mny };
+      }
+
+      // Build the camera (position + orientation basis) for this frame.
+      function camera3D() {
+        const W = innerWidth, H = innerHeight;
+        let px, py;
+        if (explore && freePos) { px = freePos.x; py = freePos.y; }
+        else if (me) { px = me.x; py = me.y; }
+        else { const s = startViewpoint(); px = s.x; py = s.y; }
+        const hdg = (manualLook ? manualLook.yaw : (heading != null ? heading : 0)) + trimHead;
+        const pit = (manualLook ? manualLook.pitch : pitchDev) + trimPitch;
+        const hh = hdg * Math.PI / 180, pp = pit * Math.PI / 180;
+        const sh = Math.sin(hh), ch = Math.cos(hh), sp = Math.sin(pp), cp = Math.cos(pp);
+        return {
+          x: px, y: py, z: EYE_H, W, H, pit,
+          fwd: [sh * cp, ch * cp, sp], rgt: [ch, -sh, 0], up: [-sh * sp, -ch * sp, cp],
+          focal: (H / 2) / Math.tan(VFOV / 2),
+        };
+      }
+      function toCam(cam, wx, wy, wz) {
+        const dx = wx - cam.x, dy = wy - cam.y, dz = (wz || 0) - cam.z;
+        return {
+          x: dx * cam.rgt[0] + dy * cam.rgt[1] + dz * cam.rgt[2],
+          y: dx * cam.up[0] + dy * cam.up[1] + dz * cam.up[2],
+          z: dx * cam.fwd[0] + dy * cam.fwd[1] + dz * cam.fwd[2],
+        };
+      }
+      // Clip a camera-space polygon against the near plane so shapes you're
+      // standing in/next to don't blow up or vanish.
+      function clipNear(cp) {
+        const out = [];
+        for (let i = 0; i < cp.length; i++) {
+          const a = cp[i], b = cp[(i + 1) % cp.length];
+          const ain = a.z >= NEARZ, bin = b.z >= NEARZ;
+          if (ain) out.push(a);
+          if (ain !== bin) { const t = (NEARZ - a.z) / (b.z - a.z); out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: NEARZ }); }
+        }
+        return out;
+      }
+      const projCam = (cam, c) => ({ x: cam.W / 2 + (c.x / c.z) * cam.focal, y: cam.H / 2 - (c.y / c.z) * cam.focal });
+
+      function fillGround(cam, pts, z, fill, stroke) {
+        const cp = clipNear(pts.map((p) => toCam(cam, p.x, p.y, z)));
+        if (cp.length < 3) return;
+        const ss = cp.map((c) => projCam(cam, c));
+        ctx.beginPath(); ss.forEach((s, i) => (i ? ctx.lineTo(s.x, s.y) : ctx.moveTo(s.x, s.y))); ctx.closePath();
+        if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+        if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1.5; ctx.stroke(); }
+      }
+      function fillQuad(cam, q, fill, stroke) {
+        const cp = clipNear(q.map((p) => toCam(cam, p[0], p[1], p[2])));
+        if (cp.length < 3) return;
+        const ss = cp.map((c) => projCam(cam, c));
+        ctx.beginPath(); ss.forEach((s, i) => (i ? ctx.lineTo(s.x, s.y) : ctx.moveTo(s.x, s.y))); ctx.closePath();
+        if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+        if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke(); }
+      }
+      const LIGHT = (() => { const v = [0.5, 0.35, 0.79], m = Math.hypot(v[0], v[1], v[2]); return [v[0] / m, v[1] / m, v[2] / m]; })();
+      const shade = (b, r, g, bl) => 'rgb(' + Math.round(r * b) + ',' + Math.round(g * b) + ',' + Math.round(bl * b) + ')';
+
+      function tree3D(cam, x, y, r) {
+        const cZ = Math.max(2.2, r * 1.6 + 1.2);
+        const g0 = toCam(cam, x, y, 0), t0 = toCam(cam, x, y, cZ * 0.55);
+        if (g0.z > NEARZ && t0.z > NEARZ) {
+          const g = projCam(cam, g0), t = projCam(cam, t0);
+          ctx.strokeStyle = '#6b4f2a'; ctx.lineWidth = Math.max(2, cam.focal * 0.3 / g0.z);
+          ctx.beginPath(); ctx.moveTo(g.x, g.y); ctx.lineTo(t.x, t.y); ctx.stroke();
+        }
+        const cc = toCam(cam, x, y, cZ);
+        if (cc.z > NEARZ) {
+          const c = projCam(cam, cc), rad = (Math.max(1.5, r) / cc.z) * cam.focal;
+          const grd = ctx.createRadialGradient(c.x - rad * 0.3, c.y - rad * 0.3, rad * 0.2, c.x, c.y, rad);
+          grd.addColorStop(0, '#4f9e44'); grd.addColorStop(1, '#2f6b2c');
+          ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(c.x, c.y, rad, 0, 7); ctx.fill();
+        }
+      }
+      function post3D(cam, x, y, color, label, top) {
+        const g0 = toCam(cam, x, y, 0), g1 = toCam(cam, x, y, top || 1.6);
+        if (g0.z <= NEARZ || g1.z <= NEARZ) return;
+        const s0 = projCam(cam, g0), s1 = projCam(cam, g1);
+        ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(s0.x, s0.y); ctx.lineTo(s1.x, s1.y); ctx.stroke();
+        ctx.fillStyle = color; ctx.beginPath(); ctx.arc(s1.x, s1.y, 5, 0, 7); ctx.fill();
+        if (label) {
+          const d = Math.hypot(x - cam.x, y - cam.y), tx = label + ' · ' + d.toFixed(0) + 'm';
+          ctx.textAlign = 'center'; ctx.font = '12px system-ui'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.6)';
+          ctx.strokeText(tx, s1.x, s1.y - 10); ctx.fillStyle = '#fff'; ctx.fillText(tx, s1.x, s1.y - 10);
+          ctx.textAlign = 'left';
+        }
+      }
+
+      function draw3D() {
+        const cam = camera3D(), W = cam.W, H = cam.H;
+        ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+        ctx.clearRect(0, 0, W, H);
+        // sky + ground, split at the horizon (which moves with pitch)
+        const yh = Math.max(0, Math.min(H, H / 2 + Math.tan(cam.pit * Math.PI / 180) * cam.focal));
+        const sky = ctx.createLinearGradient(0, 0, 0, Math.max(1, yh));
+        sky.addColorStop(0, '#2f7fd6'); sky.addColorStop(0.7, '#79b0ec'); sky.addColorStop(1, '#c7e0f6');
+        ctx.fillStyle = sky; ctx.fillRect(0, 0, W, yh);
+        const grd = ctx.createLinearGradient(0, yh, 0, H);
+        grd.addColorStop(0, '#6f9a58'); grd.addColorStop(1, '#3f5b38');
+        ctx.fillStyle = grd; ctx.fillRect(0, yh, W, H - yh);
+        if (!plan) return;
+
+        const FAR = 300;
+        const within = (p) => Math.hypot(p.x - cam.x, p.y - cam.y) <= FAR;
+
+        // flat ground features (gardens / parking / beds / buried assets)
+        for (const g of plan.polygons) {
+          if (g.kind === 'unit' || !g.pts.length || !within(g.pts[0]) || !showG(g)) continue;
+          const col = g.kind === 'parking' ? 'rgba(90,99,112,.95)' : g.kind === 'bin' ? 'rgba(120,72,40,.95)'
+            : g.kind === 'bed' ? 'rgba(96,132,58,.95)' : g.kind === 'water' ? 'rgba(40,110,210,.92)'
+            : g.kind === 'asset' ? hexA(SERVICE_COL[g.service] || '#888', .95) : 'rgba(74,120,70,.9)';
+          // water sits a touch above grass with a lighter rim so it reads as a pond
+          fillGround(cam, g.pts, g.kind === 'water' ? 0.06 : 0.02, col, g.kind === 'water' ? 'rgba(180,220,255,.7)' : 'rgba(0,0,0,.15)');
+        }
+        // roads / footpaths / driveways as ground ribbons; fences thin; services dashed-colour
+        for (const l of plan.polylines) {
+          if (!showL(l)) continue;
+          const col = l.kind === 'road' ? '#54606e'
+            : l.kind === 'driveway' ? '#b3a484'
+            : l.kind === 'fence' ? '#4a423a'
+            : l.kind === 'service' ? (SERVICE_COL[l.service] || '#888')
+            : '#b9c4d0';
+          const hw = (l.kind === 'fence' ? 0.2 : l.kind === 'service' ? 0.3 : l.w) / 2;
+          for (let i = 0; i < l.pts.length - 1; i++) {
+            const a = l.pts[i], b = l.pts[i + 1];
+            if (!within(a) && !within(b)) continue;
+            const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+            const nx = -dy / len * hw, ny = dx / len * hw;
+            fillGround(cam, [{ x: a.x + nx, y: a.y + ny }, { x: b.x + nx, y: b.y + ny }, { x: b.x - nx, y: b.y - ny }, { x: a.x - nx, y: a.y - ny }], 0.04, col, null);
+          }
+        }
+        if (plan.boundary && plan.boundary.length) fillGround(cam, plan.boundary, 0.05, null, '#3b82f6');
+
+        // depth-sorted upright objects (units, trees, markers, hazards)
+        const objs = [];
+        for (const g of plan.polygons) {
+          if (g.kind !== 'unit' || g.pts.length < 3 || !isOn('units')) continue;
+          let mx = 0, my = 0; g.pts.forEach((p) => { mx += p.x; my += p.y; }); mx /= g.pts.length; my /= g.pts.length;
+          const d = Math.hypot(mx - cam.x, my - cam.y); if (d <= FAR) objs.push({ d, kind: 'unit', g });
+        }
+        for (const q of (isOn('markers') ? plan.points : [])) { const d = Math.hypot(q.p.x - cam.x, q.p.y - cam.y); if (d <= FAR) objs.push({ d, kind: 'point', q }); }
+        for (const h of hazards) { const d = Math.hypot(h.x - cam.x, h.y - cam.y); if (d <= FAR) objs.push({ d, kind: 'haz', h }); }
+        objs.sort((a, b) => b.d - a.d);
+
+        for (const o of objs) {
+          if (o.kind === 'unit') {
+            const pts = o.g.pts;
+            for (let i = 0; i < pts.length; i++) {
+              const a = pts[i], b = pts[(i + 1) % pts.length];
+              const ex = b.x - a.x, ey = b.y - a.y, el = Math.hypot(ex, ey) || 1;
+              const nx = ey / el, ny = -ex / el; // outward normal (CCW unit polygon)
+              const br = 0.5 + 0.5 * Math.max(0, nx * LIGHT[0] + ny * LIGHT[1]);
+              fillQuad(cam, [[a.x, a.y, 0], [b.x, b.y, 0], [b.x, b.y, UNIT_H], [a.x, a.y, UNIT_H]], shade(br, 222, 226, 232), 'rgba(40,45,55,.45)');
+            }
+            fillGround(cam, pts, UNIT_H, shade(0.55 + 0.45 * LIGHT[2], 96, 106, 120), 'rgba(30,34,42,.5)');
+          } else if (o.kind === 'point') {
+            if (o.q.kind === 'tree') tree3D(cam, o.q.p.x, o.q.p.y, o.q.r || 2.5);
+            else post3D(cam, o.q.p.x, o.q.p.y, o.q.kind === 'supply-point' ? '#f59e0b' : '#0ea5e9', o.q.label || '', 1.8);
+          } else {
+            post3D(cam, o.h.x, o.h.y, '#ef4444', o.h.label || 'Hazard', 1.8);
+          }
+        }
+
+        // soft horizon haze so distant units fade into the distance (depth)
+        const hz = ctx.createLinearGradient(0, Math.max(0, yh - H * 0.16), 0, yh + H * 0.04);
+        hz.addColorStop(0, 'rgba(206,226,244,0)');
+        hz.addColorStop(0.7, 'rgba(206,226,244,0.5)');
+        hz.addColorStop(1, 'rgba(206,226,244,0)');
+        ctx.fillStyle = hz; ctx.fillRect(0, Math.max(0, yh - H * 0.16), W, H * 0.2);
+
+        // crosshair (where you're aiming)
+        ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(W / 2 - 8, H / 2); ctx.lineTo(W / 2 + 8, H / 2); ctx.moveTo(W / 2, H / 2 - 8); ctx.lineTo(W / 2, H / 2 + 8); ctx.stroke();
+      }
+
+      async function enter3D() {
+        try {
+          if (typeof DeviceOrientationEvent !== 'undefined' && DeviceOrientationEvent.requestPermission) {
+            const r = await DeviceOrientationEvent.requestPermission();
+            if (r === 'granted') addEventListener('deviceorientation', onOrient);
+          } else {
+            addEventListener('deviceorientationabsolute', onOrient);
+            addEventListener('deviceorientation', onOrient);
+          }
+        } catch (e) { /* ignore */ }
+        mode3d = true; manualLook = null;
+        // With no GPS, start in explore mode so you can roam straight away.
+        explore = !me; freePos = explore ? startViewpoint() : null; moveVec = { x: 0, y: 0 };
+        document.getElementById('btnAR').classList.add('on');
+        document.getElementById('arTrim').style.display = 'flex';
+        document.getElementById('stick').classList.add('show');
+        setStatus();
+        let last = performance.now();
+        const loop = () => {
+          if (!mode3d) return;
+          const now = performance.now(), dt = Math.min(0.05, (now - last) / 1000); last = now;
+          stepMove(dt); draw3D();
+          raf3d = requestAnimationFrame(loop);
+        };
+        raf3d = requestAnimationFrame(loop);
+      }
+      function exit3D() {
+        mode3d = false; cancelAnimationFrame(raf3d);
+        explore = false; freePos = null; moveVec = { x: 0, y: 0 };
+        document.getElementById('btnAR').classList.remove('on');
+        document.getElementById('arTrim').style.display = 'none';
+        document.getElementById('stick').classList.remove('show');
+        setStatus(); draw();
+      }
+
+      function setStatus() {
+        const gpsText = document.getElementById('gpsText');
+        const gpsDot = document.getElementById('gpsDot');
+        if (!plan) {
+          statusEl.textContent = 'Site View';
+          gpsText.textContent = oldShortLink
+            ? 'Old link: in ParkPlanner press “Send to phone” and scan the new QR'
+            : 'No plan — open the link from ParkPlanner';
+          gpsDot.className = 'gdot';
+          return;
+        }
+        statusEl.textContent = plan.name;
+        let s, cls;
+        if (mode3d && explore) {
+          s = 'Explore mode' + (me ? ' · tap Locate to return' : ''); cls = 'gdot';
+        } else if (me) {
+          s = 'GPS ±' + (acc ? acc.toFixed(0) : '?') + ' m' + (offset.x || offset.y ? ' · calibrated' : '');
+          cls = 'gdot ok';
+        } else { s = 'Waiting for GPS…'; cls = 'gdot wait'; }
+        gpsText.textContent = s;
+        gpsDot.className = cls;
+      }
+
+      // ---- geolocation ----
+      function onFix(pos) {
+        const { longitude, latitude, accuracy } = pos.coords;
+        rawMe = toLocal(longitude, latitude);
+        acc = accuracy;
+        recent.push(rawMe); if (recent.length > 8) recent.shift();
+        const avg = recent.reduce((a, p) => ({ x: a.x + p.x, y: a.y + p.y }), { x: 0, y: 0 });
+        avg.x /= recent.length; avg.y /= recent.length;
+        me = { x: avg.x + offset.x, y: avg.y + offset.y };
+        if (followMe) { view.cx = me.x; view.cy = me.y; }
+        setStatus(); draw();
+      }
+      function onGeoErr() { statusEl.textContent = 'Location unavailable — enable GPS / location permission.'; }
+      if (navigator.geolocation) {
+        navigator.geolocation.watchPosition(onFix, onGeoErr, { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 });
+      }
+
+      // ---- compass + tilt ----
+      let pitchDev = 0; // device pitch (deg): 0 = looking at horizon
+      function onOrient(e) {
+        let h = null;
+        if (typeof e.webkitCompassHeading === 'number') h = e.webkitCompassHeading;
+        else if (e.absolute && typeof e.alpha === 'number') h = 360 - e.alpha;
+        if (h != null) heading = h;
+        if (typeof e.beta === 'number') pitchDev = 90 - e.beta; // upright(90)->0; tilt down->negative
+        if (!mode3d) draw();
+      }
+      document.getElementById('btnCompass').onclick = async () => {
+        try {
+          if (typeof DeviceOrientationEvent !== 'undefined' && DeviceOrientationEvent.requestPermission) {
+            const r = await DeviceOrientationEvent.requestPermission();
+            if (r !== 'granted') return;
+          }
+          addEventListener('deviceorientationabsolute', onOrient);
+          addEventListener('deviceorientation', onOrient);
+          manualLook = null; // resume following where the phone points
+        } catch (e) {}
+      };
+
+      // ---- gestures: pan + pinch ----
+      const pts = new Map();
+      let lastDist = 0;
+      canvas.addEventListener('pointerdown', (e) => {
+        pts.set(e.pointerId, e);
+        if (mode3d) { if (!manualLook) manualLook = { yaw: heading != null ? heading : 0, pitch: pitchDev }; return; }
+        followMe = false; document.getElementById('btnRecenter').classList.remove('on');
+      });
+      canvas.addEventListener('pointermove', (e) => {
+        if (!pts.has(e.pointerId)) return;
+        const prev = pts.get(e.pointerId); pts.set(e.pointerId, e);
+        if (mode3d) {
+          if (pts.size === 1 && manualLook) {
+            manualLook.yaw -= (e.clientX - prev.clientX) * 0.2; // drag right → look left
+            manualLook.pitch = Math.max(-85, Math.min(85, manualLook.pitch + (e.clientY - prev.clientY) * 0.2));
+          }
+          return;
+        }
+        if (pts.size === 1) {
+          view.cx -= (e.clientX - prev.clientX) / view.ppm;
+          view.cy += (e.clientY - prev.clientY) / view.ppm;
+        } else if (pts.size === 2) {
+          const a = [...pts.values()];
+          const d = Math.hypot(a[0].clientX - a[1].clientX, a[0].clientY - a[1].clientY);
+          if (lastDist) view.ppm = Math.max(0.5, Math.min(40, view.ppm * (d / lastDist)));
+          lastDist = d;
+        }
+        draw();
+      });
+      const up = (e) => { pts.delete(e.pointerId); if (pts.size < 2) lastDist = 0; };
+      canvas.addEventListener('pointerup', up);
+      canvas.addEventListener('pointercancel', up);
+
+      // tap to set calibration reference
+      canvas.addEventListener('click', (e) => {
+        if (!calMode) return;
+        calRef = S2L(e.clientX, e.clientY);
+        // snap to nearest plan vertex/marker within 10 px
+        let best = null, bestD = 12 / view.ppm;
+        const consider = (p) => { const d = Math.hypot(p.x - calRef.x, p.y - calRef.y); if (d < bestD) { bestD = d; best = { x: p.x, y: p.y }; } };
+        (plan.boundary || []).forEach(consider);
+        plan.points.forEach((q) => consider(q.p));
+        plan.polygons.forEach((g) => g.pts.forEach(consider));
+        if (best) calRef = best;
+        draw();
+      });
+
+      // ---- buttons ----
+      document.getElementById('btnAR').onclick = () => { mode3d ? exit3D() : enter3D(); };
+      document.getElementById('trimPitch').oninput = (e) => { trimPitch = parseFloat(e.target.value) || 0; };
+      document.getElementById('trimHead').oninput = (e) => { trimHead = parseFloat(e.target.value) || 0; };
+
+      // ---- move joystick (3D explore) ----
+      const stick = document.getElementById('stick'), knob = document.getElementById('knob');
+      let stickId = null;
+      const STICK_R = 40;
+      const setKnob = (dx, dy) => { knob.style.left = (34 + dx) + 'px'; knob.style.top = (34 + dy) + 'px'; };
+      const updateStick = (e) => {
+        const r = stick.getBoundingClientRect();
+        let dx = e.clientX - (r.left + 54), dy = e.clientY - (r.top + 54);
+        const d = Math.hypot(dx, dy) || 1;
+        if (d > STICK_R) { dx = dx / d * STICK_R; dy = dy / d * STICK_R; }
+        setKnob(dx, dy);
+        moveVec.x = dx / STICK_R; moveVec.y = -dy / STICK_R; // up = forward
+      };
+      stick.addEventListener('pointerdown', (e) => {
+        e.preventDefault(); stickId = e.pointerId;
+        try { stick.setPointerCapture(e.pointerId); } catch (err) {}
+        if (!explore) { explore = true; const p = camGround(); freePos = { x: p.x, y: p.y }; setStatus(); }
+        updateStick(e);
+      });
+      stick.addEventListener('pointermove', (e) => { if (e.pointerId === stickId) updateStick(e); });
+      const endStick = (e) => { if (e.pointerId !== stickId) return; stickId = null; moveVec.x = 0; moveVec.y = 0; setKnob(0, 0); };
+      stick.addEventListener('pointerup', endStick);
+      stick.addEventListener('pointercancel', endStick);
+      document.getElementById('btnRecenter').onclick = () => {
+        if (mode3d) {
+          // Snap back to your real GPS position (or re-centre the explore view).
+          if (me) { explore = false; freePos = null; } else { freePos = startViewpoint(); }
+          manualLook = null; moveVec = { x: 0, y: 0 }; setKnob(0, 0); setStatus();
+          return;
+        }
+        if (me) { followMe = true; view.cx = me.x; view.cy = me.y; document.getElementById('btnRecenter').classList.add('on'); draw(); }
+        else alert('Waiting for GPS fix…');
+      };
+      document.getElementById('btnCalibrate').onclick = () => {
+        calMode = true; calRef = null;
+        document.getElementById('calBanner').style.display = 'block';
+      };
+      document.getElementById('calCancel').onclick = () => { calMode = false; calRef = null; document.getElementById('calBanner').style.display = 'none'; draw(); };
+      document.getElementById('calSet').onclick = () => {
+        if (!calRef || !rawMe) { alert('Tap your known point on the plan first, and wait for GPS.'); return; }
+        const avg = recent.reduce((a, p) => ({ x: a.x + p.x, y: a.y + p.y }), { x: 0, y: 0 });
+        avg.x /= recent.length; avg.y /= recent.length;
+        offset = { x: calRef.x - avg.x, y: calRef.y - avg.y };
+        saveOff();
+        calMode = false; calRef = null; document.getElementById('calBanner').style.display = 'none';
+        me = { x: avg.x + offset.x, y: avg.y + offset.y }; view.cx = me.x; view.cy = me.y;
+        setStatus(); draw();
+      };
+      document.getElementById('btnHazard').onclick = () => {
+        if (!me) { alert('Waiting for GPS fix.'); return; }
+        const kinds = ['tree', 'supply-point', 'building', 'hazard'];
+        const names = ['1 = Tree', '2 = Electrical supply', '3 = Building corner', '4 = Other hazard'];
+        const pick = prompt('What are you marking?\n' + names.join('\n') + '\n\nEnter 1-4:', '1');
+        if (pick === null) return;
+        const idx = Math.max(1, Math.min(4, parseInt(pick, 10) || 1)) - 1;
+        const kind = kinds[idx];
+        const def = kind === 'tree' ? 'Tree' : kind === 'supply-point' ? 'Electric supply' : kind === 'building' ? 'Building corner' : 'Hazard';
+        const label = prompt('Label (optional):', def);
+        if (label === null) return;
+        const h = { x: Math.round(me.x * 100) / 100, y: Math.round(me.y * 100) / 100, label: label || def, kind };
+        if (kind === 'tree') h.r = 3;
+        hazards.push(h);
+        saveHaz(); draw();
+      };
+
+      // ---- hazards sheet ----
+      const sheet = document.getElementById('sheet');
+      function renderList() {
+        const el = document.getElementById('hazList');
+        el.innerHTML = hazards.length ? '' : '<p class="muted">No hazards dropped yet.</p>';
+        hazards.forEach((h, i) => {
+          const d = document.createElement('div'); d.className = 'haz-item';
+          d.innerHTML = '<span>⚠ ' + (h.label || 'Hazard') + '</span>';
+          const b = document.createElement('button'); b.textContent = 'Delete';
+          b.onclick = () => { hazards.splice(i, 1); saveHaz(); renderList(); draw(); };
+          d.appendChild(b); el.appendChild(d);
+        });
+      }
+      document.getElementById('btnList').onclick = () => { renderList(); sheet.classList.add('show'); };
+      document.getElementById('sheetClose').onclick = () => sheet.classList.remove('show');
+      document.getElementById('hazExport').onclick = async () => {
+        const code = b64urlEncode(JSON.stringify({ anchor: plan.anchor, h: hazards }));
+        try { await navigator.clipboard.writeText(code); alert('Hazards code copied. Paste it into ParkPlanner → Send to phone → Import hazards.'); }
+        catch (e) { prompt('Copy this hazards code:', code); }
+      };
+
+      // ---- layers sheet ----
+      const layerSheet = document.getElementById('layerSheet');
+      const LAYER_DEFS = [
+        ['units', 'Units'], ['roads', 'Roads'], ['footpaths', 'Footpaths'], ['driveways', 'Driveways'],
+        ['boundary', 'Boundary'], ['recreation', 'Recreation'], ['parking', 'Parking'], ['binStores', 'Bin stores'],
+        ['flowerBeds', 'Flower beds'], ['water', 'Ponds / lakes'], ['fences', 'Fences'], ['markers', 'Markers'],
+        null, // → services separator
+        ['svcFoul', 'Foul / sewer', '#7a4b2b'], ['svcSurface', 'Surface water', '#13b6a6'], ['svcWater', 'Potable water', '#2563eb'],
+        ['svcElectric', 'Electric', '#ef4444'], ['svcGas', 'Gas', '#f59e0b'], ['svcTelecoms', 'Telecoms / data', '#a855f7'],
+      ];
+      function renderLayers() {
+        const box = document.getElementById('layerList');
+        box.innerHTML = '';
+        for (const def of LAYER_DEFS) {
+          if (!def) {
+            const hr = document.createElement('div'); hr.style.cssText = 'height:1px;background:var(--border);margin:10px 0 6px';
+            const t = document.createElement('div'); t.textContent = 'Services (underground)'; t.style.cssText = 'font-size:12px;color:#aab3bf;margin-bottom:2px';
+            box.appendChild(hr); box.appendChild(t); continue;
+          }
+          const [key, label, color] = def;
+          const row = document.createElement('label'); row.style.cssText = 'display:flex;align-items:center;gap:11px;padding:9px 2px;font-size:15px';
+          const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = isOn(key); cb.style.cssText = 'width:20px;height:20px';
+          cb.onchange = () => { visible[key] = cb.checked; saveVis(); draw(); };
+          row.appendChild(cb);
+          if (color) { const sw = document.createElement('span'); sw.style.cssText = 'width:13px;height:13px;border-radius:3px;flex:0 0 auto;background:' + color; row.appendChild(sw); }
+          const sp = document.createElement('span'); sp.textContent = label; row.appendChild(sp);
+          box.appendChild(row);
+        }
+      }
+      document.getElementById('btnLayers').onclick = () => { renderLayers(); layerSheet.classList.add('show'); };
+      document.getElementById('layerClose').onclick = () => layerSheet.classList.remove('show');
+      layerSheet.addEventListener('click', (e) => { if (e.target === layerSheet) layerSheet.classList.remove('show'); });
+
+      fitToPlan();
+      resize();
+      setStatus();
+    </script>
+  </body>
+</html>

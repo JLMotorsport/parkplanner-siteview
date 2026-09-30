@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="ParkPlanner Site View">
+  <defs>
+    <linearGradient id="pp-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5284ff"/>
+      <stop offset="1" stop-color="#312ea8"/>
+    </linearGradient>
+    <clipPath id="pp-tile"><rect x="8" y="8" width="240" height="240" rx="56"/></clipPath>
+  </defs>
+  <g clip-path="url(#pp-tile)">
+    <rect x="8" y="8" width="240" height="240" fill="url(#pp-bg)"/>
+    <g stroke="#bfd6ff" stroke-opacity="0.16" stroke-width="1.6">
+      <line x1="32" y1="8" x2="32" y2="248"/><line x1="56" y1="8" x2="56" y2="248"/><line x1="80" y1="8" x2="80" y2="248"/><line x1="104" y1="8" x2="104" y2="248"/><line x1="128" y1="8" x2="128" y2="248"/><line x1="152" y1="8" x2="152" y2="248"/><line x1="176" y1="8" x2="176" y2="248"/><line x1="200" y1="8" x2="200" y2="248"/><line x1="224" y1="8" x2="224" y2="248"/>
+      <line x1="8" y1="32" x2="248" y2="32"/><line x1="8" y1="56" x2="248" y2="56"/><line x1="8" y1="80" x2="248" y2="80"/><line x1="8" y1="104" x2="248" y2="104"/><line x1="8" y1="128" x2="248" y2="128"/><line x1="8" y1="152" x2="248" y2="152"/><line x1="8" y1="176" x2="248" y2="176"/><line x1="8" y1="200" x2="248" y2="200"/><line x1="8" y1="224" x2="248" y2="224"/>
+    </g>
+    <g stroke="#c7deff" stroke-width="3" stroke-linecap="round">
+      <line x1="60" y1="54" x2="196" y2="54"/><line x1="60" y1="46" x2="60" y2="62"/><line x1="196" y1="46" x2="196" y2="62"/>
+    </g>
+    <rect x="150" y="94" width="15" height="30" fill="#ffffff"/>
+    <path d="M128 70 L202 138 L54 138 Z" fill="#ffffff"/>
+    <rect x="72" y="138" width="112" height="70" rx="6" fill="#ffffff"/>
+    <rect x="86" y="154" width="24" height="24" rx="4" fill="#2f4ec0"/>
+    <rect x="146" y="154" width="24" height="24" rx="4" fill="#2f4ec0"/>
+    <rect x="116" y="166" width="24" height="42" rx="4" fill="#34d399"/>
+    <g stroke="#bfd6ff" stroke-opacity="0.85" stroke-width="3" stroke-linecap="round">
+      <line x1="48" y1="214" x2="208" y2="214"/><line x1="64" y1="214" x2="56" y2="224"/><line x1="96" y1="214" x2="88" y2="224"/><line x1="128" y1="214" x2="120" y2="224"/><line x1="160" y1="214" x2="152" y2="224"/><line x1="192" y1="214" x2="184" y2="224"/>
+    </g>
+  </g>
+</svg>
