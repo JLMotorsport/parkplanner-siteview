@@ -241,15 +241,37 @@
       // [1 version][16 salt][12 iv][AES-256-GCM ciphertext], key from
       // PBKDF2-SHA256(passcode, salt, 600000). Only the LOCKED copy is kept on
       // the phone; the passcode is kept only if "Remember on this phone" is on.
+      // #z= links spell the same envelope in base-41 (QR alphanumeric mode, ~30%
+      // denser than base64); see B41 in the desktop's crypto.ts.
+      const B41 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ+-./:';
+      function bytesFromBase41(s) {
+        const v = (c) => { const i = B41.indexOf(c); if (i < 0) throw new Error('bad base41'); return i; };
+        const out = [];
+        let i = 0;
+        for (; i + 2 < s.length; i += 3) {
+          const n = v(s[i]) + v(s[i + 1]) * 41 + v(s[i + 2]) * 1681;
+          out.push(n >> 8, n & 255);
+        }
+        if (s.length - i === 2) out.push(v(s[i]) + v(s[i + 1]) * 41);
+        return new Uint8Array(out);
+      }
+      function b64urlFromBytes(bytes) {
+        let s = '';
+        for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+        return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      }
+      // locked = 'z:' + base41 text, or base64url text (older #e= links)
       async function unlockCode(locked, pass) {
-        const bytes = bytesFromB64url(locked);
-        if (bytes[0] !== 1 || bytes.length < 45) throw new Error('not a locked link');
+        const bytes = locked.startsWith('z:') ? bytesFromBase41(decodeURIComponent(locked.slice(2))) : bytesFromB64url(locked);
+        if ((bytes[0] !== 1 && bytes[0] !== 2) || bytes.length < 45) throw new Error('not a locked link');
         const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
         const key = await crypto.subtle.deriveKey(
           { name: 'PBKDF2', hash: 'SHA-256', salt: bytes.slice(1, 17), iterations: 600000 },
           base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
-        const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes.slice(17, 29) }, key, bytes.slice(29));
-        return new TextDecoder().decode(pt);
+        const pt = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes.slice(17, 29) }, key, bytes.slice(29)));
+        // v1 encrypted the plan code text; v2 encrypts [tag byte][plan bytes]
+        if (bytes[0] === 1) return new TextDecoder().decode(pt);
+        return String.fromCharCode(pt[0]) + b64urlFromBytes(pt.subarray(1));
       }
 
       function askPasscode(message) {
@@ -306,11 +328,13 @@
       async function loadPlan() {
         // 0) passcode-locked plan in the link (#e=...). Keep only the LOCKED
         //    copy for offline use, and drop any unlocked copy an older link left.
+        const zm = location.hash.match(/[#&]z=([^&]+)/);
         const em = location.hash.match(/[#&]e=([^&]+)/);
-        if (em) {
-          localStorage.setItem('pp_lastenc', em[1]);
+        const lockedBody = zm ? 'z:' + zm[1] : em ? em[1] : null;
+        if (lockedBody) {
+          localStorage.setItem('pp_lastenc', lockedBody);
           localStorage.removeItem('pp_lastplan');
-          return await openLocked(em[1]);
+          return await openLocked(lockedBody);
         }
         // 1) full plan embedded in the link (#d=...)
         const m = location.hash.match(/[#&]d=([^&]+)/);
