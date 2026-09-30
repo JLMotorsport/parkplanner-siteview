@@ -236,8 +236,82 @@
         return normalize(JSON.parse(b64urlDecode(raw))); // legacy: plain base64 JSON
       }
 
+      // ---- passcode-locked links (#e=) ----
+      // Matches src/renderer/site-view/crypto.ts in the desktop app:
+      // [1 version][16 salt][12 iv][AES-256-GCM ciphertext], key from
+      // PBKDF2-SHA256(passcode, salt, 600000). Only the LOCKED copy is kept on
+      // the phone; the passcode is kept only if "Remember on this phone" is on.
+      async function unlockCode(locked, pass) {
+        const bytes = bytesFromB64url(locked);
+        if (bytes[0] !== 1 || bytes.length < 45) throw new Error('not a locked link');
+        const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
+        const key = await crypto.subtle.deriveKey(
+          { name: 'PBKDF2', hash: 'SHA-256', salt: bytes.slice(1, 17), iterations: 600000 },
+          base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+        const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes.slice(17, 29) }, key, bytes.slice(29));
+        return new TextDecoder().decode(pt);
+      }
+
+      function askPasscode(message) {
+        return new Promise((resolve) => {
+          const wrap = document.createElement('div');
+          wrap.id = 'lock';
+          wrap.style.cssText = 'position:fixed;inset:0;z-index:50;background:#10141a;color:#e6e8eb;display:flex;align-items:center;justify-content:center;padding:24px;font:15px system-ui,sans-serif';
+          wrap.innerHTML =
+            '<form style="width:100%;max-width:340px;display:flex;flex-direction:column;gap:12px">' +
+            '<div style="font-size:34px;text-align:center">🔒</div>' +
+            '<div style="font-weight:600;font-size:18px;text-align:center">Plan locked</div>' +
+            '<div id="lockMsg" style="color:#9aa5b1;text-align:center;line-height:1.4"></div>' +
+            '<input id="lockPass" type="password" autocomplete="current-password" placeholder="Site View passcode" ' +
+            'style="font-size:17px;padding:12px;border-radius:8px;border:1px solid #3a4250;background:#1b2028;color:#fff">' +
+            '<label style="display:flex;gap:8px;align-items:center;color:#c3cad3"><input id="lockRemember" type="checkbox" checked> Remember on this phone</label>' +
+            '<button id="lockGo" type="submit" style="font-size:17px;padding:12px;border-radius:8px;border:0;background:#3b82f6;color:#fff;font-weight:600">Open plan</button>' +
+            '</form>';
+          document.body.appendChild(wrap);
+          wrap.querySelector('#lockMsg').textContent = message;
+          const input = wrap.querySelector('#lockPass');
+          setTimeout(() => input.focus(), 50);
+          wrap.querySelector('form').addEventListener('submit', (ev) => {
+            ev.preventDefault();
+            const btn = wrap.querySelector('#lockGo');
+            btn.textContent = 'Unlocking…';
+            btn.disabled = true;
+            const answer = { pass: input.value, remember: wrap.querySelector('#lockRemember').checked };
+            wrap.remove();
+            resolve(answer);
+          });
+        });
+      }
+
+      async function openLocked(locked) {
+        const remembered = localStorage.getItem('pp_pass');
+        if (remembered) {
+          try { return await decodeFragment(await unlockCode(locked, remembered)); }
+          catch (e) { localStorage.removeItem('pp_pass'); } // passcode changed on the PC
+        }
+        let message = 'Enter the Site View passcode set in ParkPlanner.';
+        for (;;) {
+          const a = await askPasscode(message);
+          try {
+            const plan = await decodeFragment(await unlockCode(locked, a.pass));
+            if (a.remember) localStorage.setItem('pp_pass', a.pass); else localStorage.removeItem('pp_pass');
+            return plan;
+          } catch (e) {
+            message = 'That passcode did not open this plan. Try again.';
+          }
+        }
+      }
+
       let oldShortLink = false;
       async function loadPlan() {
+        // 0) passcode-locked plan in the link (#e=...). Keep only the LOCKED
+        //    copy for offline use, and drop any unlocked copy an older link left.
+        const em = location.hash.match(/[#&]e=([^&]+)/);
+        if (em) {
+          localStorage.setItem('pp_lastenc', em[1]);
+          localStorage.removeItem('pp_lastplan');
+          return await openLocked(em[1]);
+        }
         // 1) full plan embedded in the link (#d=...)
         const m = location.hash.match(/[#&]d=([^&]+)/);
         if (m) {
@@ -250,7 +324,9 @@
         // 2) old short link (#k=key): the plan store it pointed at has been
         //    retired, so the plan must come in the link itself now.
         if (/[#&]k=/.test(location.hash)) oldShortLink = true;
-        // 3) offline fallback: last cached plan
+        // 3) offline fallback: last plan opened on this phone (locked copy first)
+        const enc = localStorage.getItem('pp_lastenc');
+        if (enc) return await openLocked(enc);
         const s = localStorage.getItem('pp_lastplan');
         if (s) { try { return JSON.parse(s); } catch (e) { /* ignore */ } }
         return null;
