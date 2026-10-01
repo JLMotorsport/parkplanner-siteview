@@ -144,7 +144,8 @@
 
       // ---- binary codec (port of payload.ts decodeBinary) ----
       const MARKER_CODES = ['fire-point','water','electric','gas','reception','toilet-block','parking','bin-store','street-light','recreation-area','hazard','tree','supply-point','fountain','bin','car','parking-bay','waterfall','gate','automated-gate'];
-      const KIND_CODES = ['recreation','parking','bin','bed','water'];
+      const KIND_CODES = ['recreation','parking','bin','bed','water','woodland','golf-rough','golf-fairway','golf-tee','golf-green','golf-bunker'];
+      const GOLF_COL = { 'golf-rough':'#5f8f3b', 'golf-fairway':'#7fb84e', 'golf-tee':'#84c15a', 'golf-green':'#6fce5e', 'golf-bunker':'#e6d8a8' };
       // Underground services (append-only, mirrors payload.ts)
       const SERVICE_CODES = ['foul','surface','water','electric','gas','telecoms'];
       const ASSET_KIND_CODES = ['tank','manhole','pump','kiosk'];
@@ -443,6 +444,7 @@
         return g.kind === 'unit' ? 'units' : g.kind === 'parking' ? 'parking' : g.kind === 'bin' ? 'binStores'
           : g.kind === 'bed' ? 'flowerBeds' : g.kind === 'water' ? 'water' : g.kind === 'asset' ? serviceKey(g.service)
           : g.kind === 'building' || g.kind === 'tennis-court' || g.kind === 'boat-pen' ? 'buildings'
+          : g.kind === 'woodland' ? 'woodland' : GOLF_COL[g.kind] ? 'golf'
           : g.kind === 'recreation' ? 'recreation' : 'recreation';
       }
       function polyKeyL(l) {
@@ -450,6 +452,9 @@
           : l.kind === 'fence' ? 'fences' : l.kind === 'service' ? serviceKey(l.service) : 'roads';
       }
       const showG = (g) => isOn(polyKeyG(g));
+      // woodland and golf are the ground everything else stands on: draw them first
+      const isUnderlay = (g) => g.kind === 'woodland' || !!GOLF_COL[g.kind];
+      const byLayer = (polys) => polys.filter(isUnderlay).concat(polys.filter((g) => !isUnderlay(g)));
       const showL = (l) => isOn(polyKeyL(l));
 
       // ---- drawing ----
@@ -471,7 +476,7 @@
         if (!plan) { ctx.restore(); return; }
 
         // polygons
-        for (const g of plan.polygons) {
+        for (const g of byLayer(plan.polygons)) {
           if (!showG(g)) continue;
           poly(g.pts, true);
           ctx.fillStyle = g.kind === 'unit' ? 'rgba(219,228,238,.85)'
@@ -480,6 +485,8 @@
             : g.kind === 'bed' ? 'rgba(120,160,70,.6)'
             : g.kind === 'bin' ? 'rgba(146,64,14,.6)'
             : g.kind === 'water' ? 'rgba(37,99,235,.55)'
+            : g.kind === 'woodland' ? 'rgba(38,92,46,.7)'
+            : GOLF_COL[g.kind] ? hexA(GOLF_COL[g.kind], .75)
             : g.kind === 'building' ? 'rgba(168,140,118,.9)'
             : g.kind === 'tennis-court' ? 'rgba(52,120,96,.85)'
             : g.kind === 'boat-pen' ? 'rgba(120,150,175,.75)'
@@ -712,10 +719,11 @@
         const within = (p) => Math.hypot(p.x - cam.x, p.y - cam.y) <= FAR;
 
         // flat ground features (gardens / parking / beds / buried assets)
-        for (const g of plan.polygons) {
+        for (const g of byLayer(plan.polygons)) {
           if (g.kind === 'unit' || g.kind === 'building' || !g.pts.length || !within(g.pts[0]) || !showG(g)) continue;
           const col = g.kind === 'parking' ? 'rgba(90,99,112,.95)' : g.kind === 'bin' ? 'rgba(120,72,40,.95)'
             : g.kind === 'tennis-court' ? 'rgba(52,120,96,.95)' : g.kind === 'boat-pen' ? 'rgba(120,150,175,.9)'
+            : g.kind === 'woodland' ? 'rgba(38,92,46,.95)' : GOLF_COL[g.kind] ? hexA(GOLF_COL[g.kind], .95)
             : g.kind === 'bed' ? 'rgba(96,132,58,.95)' : g.kind === 'water' ? 'rgba(40,110,210,.92)'
             : g.kind === 'asset' ? hexA(SERVICE_COL[g.service] || '#888', .95) : 'rgba(74,120,70,.9)';
           // water sits a touch above grass with a lighter rim so it reads as a pond
@@ -1038,7 +1046,7 @@
       const LAYER_DEFS = [
         ['units', 'Units'], ['buildings', 'Buildings'], ['roads', 'Roads'], ['footpaths', 'Footpaths'], ['driveways', 'Driveways'],
         ['boundary', 'Boundary'], ['recreation', 'Recreation'], ['parking', 'Parking'], ['binStores', 'Bin stores'],
-        ['flowerBeds', 'Flower beds'], ['water', 'Ponds / lakes'], ['fences', 'Fences'], ['markers', 'Markers'],
+        ['flowerBeds', 'Flower beds'], ['water', 'Ponds / lakes'], ['woodland', 'Woodland'], ['golf', 'Golf'], ['fences', 'Fences'], ['markers', 'Markers'],
         null, // → services separator
         ['svcFoul', 'Foul / sewer', '#7a4b2b'], ['svcSurface', 'Surface water', '#13b6a6'], ['svcWater', 'Potable water', '#2563eb'],
         ['svcElectric', 'Electric', '#ef4444'], ['svcGas', 'Gas', '#f59e0b'], ['svcTelecoms', 'Telecoms / data', '#a855f7'],
