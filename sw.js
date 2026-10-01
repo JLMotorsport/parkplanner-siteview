@@ -1,6 +1,6 @@
 // Minimal service worker: cache the app shell so the Site View opens offline on
 // site (no signal). The plan itself is kept in localStorage by index.html.
-const CACHE = 'pp-siteview-v29';
+const CACHE = 'pp-siteview-v30';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', (e) => {

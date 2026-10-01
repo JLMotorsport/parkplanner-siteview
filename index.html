@@ -148,6 +148,7 @@
       // Underground services (append-only, mirrors payload.ts)
       const SERVICE_CODES = ['foul','surface','water','electric','gas','telecoms'];
       const ASSET_KIND_CODES = ['tank','manhole','pump','kiosk'];
+      const BUILDING_KIND_CODES = ['building','tennis-court','boat-pen'];
       const SERVICE_COL = { foul:'#7a4b2b', surface:'#13b6a6', water:'#2563eb', electric:'#ef4444', gas:'#f59e0b', telecoms:'#a855f7' };
       const serviceKey = (s) => 'svc' + (s ? s[0].toUpperCase() + s.slice(1) : 'Foul');
       const hexA = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`; };
@@ -191,6 +192,11 @@
           const rr = (rot * Math.PI) / 180, cs = Math.cos(rr), sn = Math.sin(rr), hl = L / 2, hw = W / 2;
           const pts = [[-hl,-hw],[hl,-hw],[hl,hw],[-hl,hw]].map(([dx, dy]) => ({ x: cx + dx * cs - dy * sn, y: cy + dx * sn + dy * cs }));
           polygons.push({ pts, kind: 'asset', service: s, assetKind: k });
+        } }
+        // v6+: buildings / tennis courts / boat pens (tolerant of older links)
+        if (pos < bytes.length) { const bc = vint(); for (let i = 0; i < bc; i++) {
+          const k = BUILDING_KIND_CODES[u8()] || 'building', heightM = vint() / 10;
+          polygons.push({ pts: poly(), kind: k, heightM });
         } }
         return { name, anchor, boundary, polygons, polylines, points };
       }
@@ -436,6 +442,7 @@
       function polyKeyG(g) {
         return g.kind === 'unit' ? 'units' : g.kind === 'parking' ? 'parking' : g.kind === 'bin' ? 'binStores'
           : g.kind === 'bed' ? 'flowerBeds' : g.kind === 'water' ? 'water' : g.kind === 'asset' ? serviceKey(g.service)
+          : g.kind === 'building' || g.kind === 'tennis-court' || g.kind === 'boat-pen' ? 'buildings'
           : g.kind === 'recreation' ? 'recreation' : 'recreation';
       }
       function polyKeyL(l) {
@@ -473,6 +480,9 @@
             : g.kind === 'bed' ? 'rgba(120,160,70,.6)'
             : g.kind === 'bin' ? 'rgba(146,64,14,.6)'
             : g.kind === 'water' ? 'rgba(37,99,235,.55)'
+            : g.kind === 'building' ? 'rgba(168,140,118,.9)'
+            : g.kind === 'tennis-court' ? 'rgba(52,120,96,.85)'
+            : g.kind === 'boat-pen' ? 'rgba(120,150,175,.75)'
             : g.kind === 'asset' ? hexA(SERVICE_COL[g.service] || '#888', .5)
             : 'rgba(80,160,90,.45)';
           ctx.fill();
@@ -703,8 +713,9 @@
 
         // flat ground features (gardens / parking / beds / buried assets)
         for (const g of plan.polygons) {
-          if (g.kind === 'unit' || !g.pts.length || !within(g.pts[0]) || !showG(g)) continue;
+          if (g.kind === 'unit' || g.kind === 'building' || !g.pts.length || !within(g.pts[0]) || !showG(g)) continue;
           const col = g.kind === 'parking' ? 'rgba(90,99,112,.95)' : g.kind === 'bin' ? 'rgba(120,72,40,.95)'
+            : g.kind === 'tennis-court' ? 'rgba(52,120,96,.95)' : g.kind === 'boat-pen' ? 'rgba(120,150,175,.9)'
             : g.kind === 'bed' ? 'rgba(96,132,58,.95)' : g.kind === 'water' ? 'rgba(40,110,210,.92)'
             : g.kind === 'asset' ? hexA(SERVICE_COL[g.service] || '#888', .95) : 'rgba(74,120,70,.9)';
           // water sits a touch above grass with a lighter rim so it reads as a pond
@@ -736,6 +747,11 @@
           let mx = 0, my = 0; g.pts.forEach((p) => { mx += p.x; my += p.y; }); mx /= g.pts.length; my /= g.pts.length;
           const d = Math.hypot(mx - cam.x, my - cam.y); if (d <= FAR) objs.push({ d, kind: 'unit', g });
         }
+        for (const g of plan.polygons) {
+          if (g.kind !== 'building' || g.pts.length < 3 || !isOn('buildings')) continue;
+          let mx = 0, my = 0; g.pts.forEach((p) => { mx += p.x; my += p.y; }); mx /= g.pts.length; my /= g.pts.length;
+          const d = Math.hypot(mx - cam.x, my - cam.y); if (d <= FAR) objs.push({ d, kind: 'building', g });
+        }
         for (const q of (isOn('markers') ? plan.points : [])) { const d = Math.hypot(q.p.x - cam.x, q.p.y - cam.y); if (d <= FAR) objs.push({ d, kind: 'point', q }); }
         for (const h of hazards) { const d = Math.hypot(h.x - cam.x, h.y - cam.y); if (d <= FAR) objs.push({ d, kind: 'haz', h }); }
         objs.sort((a, b) => b.d - a.d);
@@ -751,6 +767,17 @@
               fillQuad(cam, [[a.x, a.y, 0], [b.x, b.y, 0], [b.x, b.y, UNIT_H], [a.x, a.y, UNIT_H]], shade(br, 222, 226, 232), 'rgba(40,45,55,.45)');
             }
             fillGround(cam, pts, UNIT_H, shade(0.55 + 0.45 * LIGHT[2], 96, 106, 120), 'rgba(30,34,42,.5)');
+          } else if (o.kind === 'building') {
+            // walls to the building's own height; drawn either winding, so
+            // light each wall by how squarely it faces the sun
+            const pts = o.g.pts, H = o.g.heightM || 4;
+            for (let i = 0; i < pts.length; i++) {
+              const a = pts[i], b = pts[(i + 1) % pts.length];
+              const ex = b.x - a.x, ey = b.y - a.y, el = Math.hypot(ex, ey) || 1;
+              const br = 0.5 + 0.5 * Math.abs((ey / el) * LIGHT[0] - (ex / el) * LIGHT[1]);
+              fillQuad(cam, [[a.x, a.y, 0], [b.x, b.y, 0], [b.x, b.y, H], [a.x, a.y, H]], shade(br, 196, 172, 150), 'rgba(60,45,35,.45)');
+            }
+            fillGround(cam, pts, H, shade(0.55 + 0.45 * LIGHT[2], 120, 92, 80), 'rgba(40,30,25,.5)');
           } else if (o.kind === 'point') {
             if (o.q.kind === 'tree') tree3D(cam, o.q.p.x, o.q.p.y, o.q.r || 2.5);
             else post3D(cam, o.q.p.x, o.q.p.y, o.q.kind === 'supply-point' ? '#f59e0b' : '#0ea5e9', o.q.label || '', 1.8);
@@ -1009,7 +1036,7 @@
       // ---- layers sheet ----
       const layerSheet = document.getElementById('layerSheet');
       const LAYER_DEFS = [
-        ['units', 'Units'], ['roads', 'Roads'], ['footpaths', 'Footpaths'], ['driveways', 'Driveways'],
+        ['units', 'Units'], ['buildings', 'Buildings'], ['roads', 'Roads'], ['footpaths', 'Footpaths'], ['driveways', 'Driveways'],
         ['boundary', 'Boundary'], ['recreation', 'Recreation'], ['parking', 'Parking'], ['binStores', 'Bin stores'],
         ['flowerBeds', 'Flower beds'], ['water', 'Ponds / lakes'], ['fences', 'Fences'], ['markers', 'Markers'],
         null, // → services separator
